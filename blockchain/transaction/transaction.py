@@ -2,10 +2,26 @@ import hashlib
 from ecdsa import BadSignatureError
 from ..encoding.encoding import decode_public_key
 from ..database.transactiondb import TransactionModel
+from .Input import Input
+from .output import Output
+from ..database.unspent_transactiondb import UnspentTransactionModel
+
+
+def verify_script(inp: Input) -> bool:
+    transaction = Transaction.get_transaction(inp.transaction_id)
+    if not transaction.inputs[inp.index].value == inp.value:
+        return False
+
+    locking_script = transaction.outputs[inp.index].script_publickey
+    script_string = inp.script_signature + " " + locking_script
+
+    script = Script(script_string, inp.transaction_id)
+    if script.verify_script():
+        return True
+    return False
 
 
 class Transaction:
-
 
     def __init__(self, publickey: str = None, inputs: list = None, outputs: list = None, timestamp: str = None,
                  transaction_id: str = None, signature: str = None, description: str = None):
@@ -42,6 +58,20 @@ class Transaction:
         return TransactionModel().add_transaction(transaction=transaction)
 
 
+    def is_unspent(self) -> bool:
+        """
+            Checks whether the transaction is unspent
+
+            Returns:
+                bool    
+        """
+        
+        for inp in self.inputs:
+            if UnspentTransactionModel().is_spent(inp):
+                return False
+        return True
+
+
     def find_transaction_id(self) -> str:
         """
             Hash of the details of entire transaction
@@ -73,19 +103,6 @@ class Transaction:
         return message_hash
 
 
-    def json_data(self) -> dict:
-        document = {
-            "publickey": self.publickey,
-            "inputs": [i.json_data() for i in self.inputs],
-            "outputs": [i.json_data() for i in self.outputs],
-            "description": self.description,
-            "timestamp": self.timestamp,
-            "signature": self.signature,
-            "transaction_id": self.transaction_id,
-        }
-        return document
-
-
     def verify_signature(self) -> bool:
         pubkey = decode_public_key(self.publickey)
 
@@ -105,11 +122,11 @@ class Transaction:
     def verify_transaction(self) -> bool:
 
         for i in self.inputs:
-            if not i.verify_script():
+            if not verify_script(inp):
                 return False
 
         transaction_id = self.transaction_id
-        if not self.find_transaction_id == transaction_id:
+        if not self.find_transaction_id() == transaction_id:
             return False
         return self.verify_signature()
 
@@ -126,6 +143,29 @@ class Transaction:
         for i in self.outputs:
             total_output += i.value
         return total_output
+
+
+    def json_data(self) -> dict:
+        document = {
+            "publickey": self.publickey,
+            "inputs": [i.json_data() for i in self.inputs],
+            "outputs": [i.json_data() for i in self.outputs],
+            "description": self.description,
+            "timestamp": self.timestamp,
+            "signature": self.signature,
+            "transaction_id": self.transaction_id,
+        }
+        return document
+
+
+    def from_json(self, transaction_document: dict):
+        self.publickey = transaction_document['publickey']
+        self.description = transaction_document['description']
+        self.timestamp = transaction_document['timestamp']
+        self.signature = transaction_document['signature']
+        self.transaction_id = transaction_document['transaction_id']
+        self.inputs = [ Input().from_json(doc) for doc in transaction_document['inputs'] ]
+        self.outputs = [ Output().from_json(doc) for doc in transaction_document['outputs'] ]
 
 
     def __repr__(self):

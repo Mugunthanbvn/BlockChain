@@ -1,5 +1,4 @@
 import base64
-from .transaction import Transaction
 from .script import Script
 
 """
@@ -25,24 +24,6 @@ class Input:
         self.script_signature = script_signature                                 # unlocking script
         
         
-    def verify_script(self) -> bool:
-        transaction = Transaction.get_transaction(self.transaction_id)
-        if not transaction.inputs[self.index].value == self.value:
-            return False
-
-        locking_script = transaction.outputs[self.index].script_publickey
-        script_string = self.script_signature + " " + locking_script
-
-        script = Script(script_string, self.transaction_id)
-        if script.verify_script():
-            return True
-        return False
-
-
-    def __str__(self) -> str:
-        return f"transaction_id: {self.transaction_id}, index: {self.index}, value: {self.value}, scriptSig: {self.script_signature}"
-        
-        
     def json_data(self) -> dict:
         data = {
             "transaction_id": self.transaction_id,
@@ -51,3 +32,14 @@ class Input:
             "script_signtaure": self.script_signature,
         }
         return data
+
+
+    def from_json(self, input_document: dict):
+        self.transaction_id = input_document['transaction_id']
+        self.index = input_document['index']
+        self.value = input_document['value']
+        self.script_signature = input_document['script_ssignature']
+        
+
+    def __str__(self) -> str:
+        return f"transaction_id: {self.transaction_id}, index: {self.index}, value: {self.value}, scriptSig: {self.script_signature}"
